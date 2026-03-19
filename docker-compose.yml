@@ -28,7 +28,7 @@ services:
   backend:
     build: ./backend
     ports:
-      - "8765:5000"
+      - "8765:8765"
     environment:
       - DB_HOST=db
       - DB_PORT=5432
