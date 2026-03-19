@@ -194,6 +194,44 @@ app.post('/api/register', async (req, res) => {
     }
 });
 
+app.post('/api/login', async (req, res) => {
+    const { username, password } = req.body || {};
+
+    if (!username || !password) {
+        return res.status(400).json({ error: 'username and password are required' });
+    }
+
+    try {
+        const result = await pool.query(
+            'SELECT id, username, email, password_hash, domain FROM users WHERE username = $1 LIMIT 1',
+            [String(username).trim().toLowerCase()]
+        );
+
+        if (!result.rows.length) {
+            return res.status(401).json({ error: 'invalid username or password' });
+        }
+
+        const user = result.rows[0];
+        const passwordMatches = await bcrypt.compare(password, user.password_hash);
+
+        if (!passwordMatches) {
+            return res.status(401).json({ error: 'invalid username or password' });
+        }
+
+        return res.status(200).json({
+            message: 'login successful',
+            user: {
+                id: user.id,
+                username: user.username,
+                email: user.email,
+                domain: user.domain
+            }
+        });
+    } catch (err) {
+        return res.status(500).json({ error: 'login failed', details: err.message });
+    }
+});
+
 app.listen(PORT, () => {
     console.log(`[server works on port: ${PORT}](http://_vscodecontentref_/3)`);
 });
