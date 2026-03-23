@@ -1,59 +1,51 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { API } from "../api/config";
+import { useSnackbar } from "../hooks/useSnackbar";
+import AuthBrand from "../components/AuthBrand";
+import FormField from "../components/FormField";
+import AppSnackbar from "../components/AppSnackbar";
 
 export default function Login() {
   const navigate = useNavigate();
+  const { snackbar, showSnackbar, closeSnackbar } = useSnackbar("error");
 
-  const [formData, setFormData] = useState({
-    username: "",
-    password: ""
-  });
+  useEffect(() => { document.title = "Login — NovaHost"; }, []);
+
+  const [formData, setFormData] = useState({ username: "", password: "" });
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-
     setFormData((prev) => ({
       ...prev,
       [name]: name === "username" ? value.toLowerCase().trim() : value
     }));
-
-    if (error) {
-      setError("");
-    }
   };
 
   const handleLogin = async (e) => {
     e.preventDefault();
 
     if (!formData.username || !formData.password) {
-      setError("Please fill in username and password.");
+      showSnackbar("Please fill in username and password.");
       return;
     }
 
     setLoading(true);
-    setError("");
-
     try {
-      const response = await fetch("http://localhost:8765/api/login", {
+      const response = await fetch(`${API}/api/login`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(formData)
       });
 
       const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Login failed.");
 
-      if (!response.ok) {
-        throw new Error(data.error || "Login failed.");
-      }
-
-      localStorage.setItem("authUser", JSON.stringify(data.user));
+      localStorage.setItem("authToken", data.token);
       navigate("/dashboard");
     } catch (err) {
-      setError(`Error: ${err.message}`);
+      showSnackbar(`Error: ${err.message}`);
     } finally {
       setLoading(false);
     }
@@ -61,75 +53,41 @@ export default function Login() {
 
   return (
     <div className="app-container">
-      <div className="brand auth-brand">
-        <div className="brand-header">
-          <img
-            src="/logo_nova-host.svg"
-            alt="NovaHost Logo"
-            width="48"
-            height="48"
-          />
-          <h1>
-            Nova<span>Host</span>
-          </h1>
-        </div>
-        <p>Sign in to manage your hosting account.</p>
-      </div>
+      <AuthBrand subtitle="Sign in to manage your hosting account." />
 
       <div className="auth-card">
         <form onSubmit={handleLogin}>
-          {error && <div className="alert alert-error">{error}</div>}
-
-          <div className="form-group">
-            <label htmlFor="username">Username</label>
-            <div className="input-wrapper">
-              <input
-                id="username"
-                type="text"
-                name="username"
-                className="form-control"
-                placeholder="e.g., johndoe"
-                value={formData.username}
-                onChange={handleChange}
-                disabled={loading}
-              />
-            </div>
-          </div>
-
-          <div className="form-group">
-            <label htmlFor="password">Password</label>
-            <div className="input-wrapper">
-              <input
-                id="password"
-                type="password"
-                name="password"
-                className="form-control"
-                placeholder="••••••••"
-                value={formData.password}
-                onChange={handleChange}
-                disabled={loading}
-              />
-            </div>
-          </div>
+          <FormField
+            id="username"
+            label="Username"
+            name="username"
+            placeholder="e.g., johndoe"
+            value={formData.username}
+            onChange={handleChange}
+            disabled={loading}
+          />
+          <FormField
+            id="password"
+            label="Password"
+            type="password"
+            name="password"
+            placeholder="••••••••"
+            value={formData.password}
+            onChange={handleChange}
+            disabled={loading}
+          />
 
           <button type="submit" className="submit-btn" disabled={loading}>
-            {loading ? (
-              <>
-                <div className="spinner"></div>
-                Signing in...
-              </>
-            ) : (
-              "Login"
-            )}
+            {loading ? <><div className="spinner"></div>Signing in...</> : "Login"}
           </button>
 
           <div className="login-wrapper">
-            <p>
-              Don&apos;t have an account? <Link to="/register">Register</Link>
-            </p>
+            <p>Don&apos;t have an account? <Link to="/register">Register</Link></p>
           </div>
         </form>
       </div>
+
+      <AppSnackbar {...snackbar} onClose={closeSnackbar} />
     </div>
   );
 }

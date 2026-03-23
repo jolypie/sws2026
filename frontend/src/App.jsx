@@ -2,17 +2,8 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import Register from "./pages/Register";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
+import PrivateRoute from "./components/PrivateRoute";
 import "./App.css";
-
-function PrivateRoute({ children }) {
-  const savedUser = localStorage.getItem("authUser");
-
-  if (!savedUser) {
-    return <Navigate to="/login" replace />;
-  }
-
-  return children;
-}
 
 function App() {
   return (
