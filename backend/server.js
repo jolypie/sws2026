@@ -1,5 +1,6 @@
 const express = require('express');
 const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
 const { Pool } = require('pg');
 const fs = require('fs/promises');
 const path = require('path');
@@ -10,11 +11,13 @@ const app = express();
 app.use(cors({
     origin: 'http://localhost:5274',
     methods: ['GET', 'POST', 'OPTIONS'],
-    allowedHeaders: ['Content-Type']
+    allowedHeaders: ['Content-Type', 'Authorization']
 }));
 app.use(express.json());
 
 const PORT = process.env.PORT || 5000;
+const JWT_SECRET = process.env.JWT_SECRET;
+const JWT_EXPIRES_IN = '1h';
 
 const DB_HOST = process.env.DB_HOST || 'db';
 const DB_PORT = Number(process.env.DB_PORT || 5432);
@@ -32,6 +35,8 @@ const pool = new Pool({
     password: DB_PASSWORD,
     database: DB_NAME
 });
+
+// ─── Helpers ────────────────────────────────────────────────────────────────
 
 function normalizeDomain(domain) {
     return String(domain || '').trim().toLowerCase();
@@ -93,16 +98,116 @@ async function removeVhost(domain) {
     }
 }
 
+// ─── Auth middleware ─────────────────────────────────────────────────────────
+
+function requireAuth(req, res, next) {
+    const header = req.headers['authorization'] || '';
+    const token = header.startsWith('Bearer ') ? header.slice(7) : null;
+
+    if (!token) {
+        return res.status(401).json({ error: 'no token provided' });
+    }
+
+    try {
+        req.user = jwt.verify(token, JWT_SECRET);
+        next();
+    } catch {
+        return res.status(401).json({ error: 'invalid or expired token' });
+    }
+}
+
+// ─── Routes ──────────────────────────────────────────────────────────────────
+
 app.get('/', (req, res) => {
     res.send('backend works');
 });
 
+// Register — creates account only, no domain
 app.post('/api/register', async (req, res) => {
-    const { username, email, password, domain } = req.body || {};
+    const { username, email, password } = req.body || {};
+
+    if (!username || !email || !password) {
+        return res.status(400).json({ error: 'username, email and password are required' });
+    }
+
+    try {
+        const existing = await pool.query(
+            'SELECT id FROM users WHERE email = $1 OR username = $2 LIMIT 1',
+            [email, String(username).trim().toLowerCase()]
+        );
+        if (existing.rows.length) {
+            return res.status(409).json({ error: 'email or username already exists' });
+        }
+
+        const passwordHash = await bcrypt.hash(password, 12);
+        await pool.query(
+            'INSERT INTO users (username, email, password_hash, created_at) VALUES ($1, $2, $3, NOW())',
+            [String(username).trim().toLowerCase(), email, passwordHash]
+        );
+
+        return res.status(201).json({ message: 'account created' });
+    } catch (err) {
+        return res.status(500).json({ error: 'registration failed', details: err.message });
+    }
+});
+
+// Login — returns JWT token
+app.post('/api/login', async (req, res) => {
+    const { username, password } = req.body || {};
+
+    if (!username || !password) {
+        return res.status(400).json({ error: 'username and password are required' });
+    }
+
+    try {
+        const result = await pool.query(
+            'SELECT id, username, email, password_hash FROM users WHERE username = $1 LIMIT 1',
+            [String(username).trim().toLowerCase()]
+        );
+
+        if (!result.rows.length) {
+            return res.status(401).json({ error: 'invalid username or password' });
+        }
+
+        const user = result.rows[0];
+        const passwordMatches = await bcrypt.compare(password, user.password_hash);
+
+        if (!passwordMatches) {
+            return res.status(401).json({ error: 'invalid username or password' });
+        }
+
+        const token = jwt.sign(
+            { id: user.id, username: user.username, email: user.email },
+            JWT_SECRET,
+            { expiresIn: JWT_EXPIRES_IN }
+        );
+
+        return res.status(200).json({ message: 'login successful', token });
+    } catch (err) {
+        return res.status(500).json({ error: 'login failed', details: err.message });
+    }
+});
+
+// Get all domains for the authenticated user
+app.get('/api/domains', requireAuth, async (req, res) => {
+    try {
+        const result = await pool.query(
+            'SELECT id, domain, name, description, created_at FROM domains WHERE user_id = $1 ORDER BY created_at ASC',
+            [req.user.id]
+        );
+        return res.status(200).json({ domains: result.rows });
+    } catch (err) {
+        return res.status(500).json({ error: 'failed to fetch domains', details: err.message });
+    }
+});
+
+// Add a new domain for the authenticated user
+app.post('/api/domains', requireAuth, async (req, res) => {
+    const { domain, name, description } = req.body || {};
     const normalizedDomain = normalizeDomain(domain);
 
-    if (!username || !email || !password || !normalizedDomain) {
-        return res.status(400).json({ error: 'username, email, password, domain are required' });
+    if (!normalizedDomain) {
+        return res.status(400).json({ error: 'domain is required' });
     }
 
     if (!isValidDomain(normalizedDomain)) {
@@ -114,10 +219,6 @@ app.post('/api/register', async (req, res) => {
         return res.status(400).json({ error: 'invalid domain path' });
     }
 
-    const ftpLogin = ftpLoginFromDomain(normalizedDomain);
-    const ftpPassword = password;
-    const passwordHash = await bcrypt.hash(password, 12);
-
     let createdDir = false;
     let wroteIndex = false;
     let appendedVhost = false;
@@ -126,17 +227,8 @@ app.post('/api/register', async (req, res) => {
     try {
         await client.query('BEGIN');
 
-        const existingUser = await client.query(
-            'SELECT id FROM users WHERE email = $1 OR username = $2 LIMIT 1',
-            [email, username]
-        );
-        if (existingUser.rows.length) {
-            await client.query('ROLLBACK');
-            return res.status(409).json({ error: 'email or username already exists' });
-        }
-
         const existingDomain = await client.query(
-            'SELECT id FROM users WHERE domain = $1 LIMIT 1',
+            'SELECT id FROM domains WHERE domain = $1 LIMIT 1',
             [normalizedDomain]
         );
         if (existingDomain.rows.length) {
@@ -145,13 +237,8 @@ app.post('/api/register', async (req, res) => {
         }
 
         await client.query(
-            'INSERT INTO users (username, email, password_hash, domain, created_at) VALUES ($1, $2, $3, $4, NOW())',
-            [username, email, passwordHash, normalizedDomain]
-        );
-
-        await client.query(
-            'INSERT INTO ftp_users (ftp_login, ftp_password, ftp_dir, created_at) VALUES ($1, $2, $3, NOW())',
-            [ftpLogin, ftpPassword, `/home/ftpusers/${normalizedDomain}`]
+            'INSERT INTO domains (user_id, domain, name, description, created_at) VALUES ($1, $2, $3, $4, NOW())',
+            [req.user.id, normalizedDomain, name || null, description || null]
         );
 
         await fs.mkdir(clientDir, { recursive: false });
@@ -170,9 +257,10 @@ app.post('/api/register', async (req, res) => {
         await client.query('COMMIT');
 
         return res.status(201).json({
-            message: 'Client site created',
+            message: 'domain added',
             domain: normalizedDomain,
-            ftpLogin,
+            name: name || null,
+            description: description || null,
             apacheReloadRequired: true
         });
     } catch (err) {
@@ -188,50 +276,40 @@ app.post('/api/register', async (req, res) => {
             try { await fs.rmdir(clientDir); } catch { }
         }
 
-        return res.status(500).json({ error: 'registration failed', details: err.message });
+        return res.status(500).json({ error: 'failed to add domain', details: err.message });
     } finally {
         client.release();
     }
 });
 
-app.post('/api/login', async (req, res) => {
-    const { username, password } = req.body || {};
+// ─── Auto-migration on startup ───────────────────────────────────────────────
 
-    if (!username || !password) {
-        return res.status(400).json({ error: 'username and password are required' });
+async function runMigrations() {
+    const check = await pool.query(`
+        SELECT EXISTS (
+            SELECT FROM information_schema.tables
+            WHERE table_schema = 'public' AND table_name = 'domains'
+        )
+    `);
+
+    if (!check.rows[0].exists) {
+        console.log('[migration] domains table not found, running 001_jwt_multi_domain...');
+        const sql = await fs.readFile('/app/db/migrations/001_jwt_multi_domain.sql', 'utf8');
+        await pool.query(sql);
+        console.log('[migration] done.');
+    } else {
+        console.log('[migration] schema up to date.');
     }
+}
 
-    try {
-        const result = await pool.query(
-            'SELECT id, username, email, password_hash, domain FROM users WHERE username = $1 LIMIT 1',
-            [String(username).trim().toLowerCase()]
-        );
+async function start() {
+    await runMigrations();
+    app.listen(PORT, () => {
+        console.log(`server running on port ${PORT}`);
+    });
+}
 
-        if (!result.rows.length) {
-            return res.status(401).json({ error: 'invalid username or password' });
-        }
-
-        const user = result.rows[0];
-        const passwordMatches = await bcrypt.compare(password, user.password_hash);
-
-        if (!passwordMatches) {
-            return res.status(401).json({ error: 'invalid username or password' });
-        }
-
-        return res.status(200).json({
-            message: 'login successful',
-            user: {
-                id: user.id,
-                username: user.username,
-                email: user.email,
-                domain: user.domain
-            }
-        });
-    } catch (err) {
-        return res.status(500).json({ error: 'login failed', details: err.message });
-    }
-});
-
-app.listen(PORT, () => {
-    console.log(`[server works on port: ${PORT}](http://_vscodecontentref_/3)`);
+start().catch((err) => {
+    console.error('startup failed:', err.message);
+    process.exit(1);
 });
