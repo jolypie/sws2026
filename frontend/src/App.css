@@ -432,6 +432,32 @@ textarea.form-control {
   padding: 0.75rem 1.5rem;
 }
 
+.dialog-btn-danger {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: auto;
+  margin-top: 0;
+  padding: 0.75rem 1.5rem;
+  background: #ef4444;
+  color: #fff;
+  border: none;
+  border-radius: 0.6rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.dialog-btn-danger:hover:not(:disabled) {
+  background: #dc2626;
+}
+
+.dialog-btn-danger:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 /* Domain Card */
 .domain-card {
   display: flex;
@@ -505,6 +531,89 @@ textarea.form-control {
 .domain-card-link:hover {
   background: rgba(163, 230, 53, 0.1);
   border-color: var(--accent-color);
+}
+
+.domain-card-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+
+.domain-card-delete {
+  background: none;
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  border-radius: 0.5rem;
+  color: #ef4444;
+  font-size: 0.8rem;
+  padding: 0.35rem 0.75rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.domain-card-delete:hover {
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.domain-card-confirm {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.domain-card-confirm-yes {
+  background: #ef4444;
+  border: none;
+  border-radius: 0.4rem;
+  color: #fff;
+  font-size: 0.78rem;
+  padding: 0.25rem 0.55rem;
+  cursor: pointer;
+}
+
+.domain-card-confirm-no {
+  background: none;
+  border: 1px solid var(--border-color);
+  border-radius: 0.4rem;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  padding: 0.25rem 0.55rem;
+  cursor: pointer;
+}
+
+.domain-ftp {
+  margin-top: 0.5rem;
+}
+
+.domain-ftp-toggle {
+  background: none;
+  border: 1px solid rgba(163, 230, 53, 0.3);
+  border-radius: 0.4rem;
+  color: var(--accent-color);
+  font-size: 0.78rem;
+  padding: 0.2rem 0.6rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.domain-ftp-toggle:hover {
+  background: rgba(163, 230, 53, 0.1);
+}
+
+.domain-ftp-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  margin-top: 0.4rem;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  background: rgba(163, 230, 53, 0.05);
+  border: 1px solid rgba(163, 230, 53, 0.15);
+  border-radius: 0.4rem;
+  padding: 0.5rem 0.75rem;
 }
 
 @media (max-width: 768px) {

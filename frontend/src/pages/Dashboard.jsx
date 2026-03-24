@@ -14,7 +14,7 @@ import EmptyDomains from "../components/EmptyDomains";
 export default function Dashboard() {
   const navigate = useNavigate();
   const { authFetch, logout, getUser } = useAuth();
-  const { domains, loading, addLoading, addDomain } = useDomains(authFetch);
+  const { domains, loading, addLoading, addDomain, deleteDomain } = useDomains(authFetch);
 
   const [user] = useState(() => getUser());
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -109,7 +109,13 @@ export default function Dashboard() {
           ) : domains.length === 0 ? (
             <EmptyDomains onAdd={() => setDialogOpen(true)} />
           ) : (
-            domains.map((d) => <DomainCard key={d.domain} domain={d} />)
+            domains.map((d) => (
+              <DomainCard
+                key={d.domain}
+                domain={d}
+                onDelete={deleteDomain}
+              />
+            ))
           )}
         </div>
       </div>

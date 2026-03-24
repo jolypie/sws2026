@@ -71,10 +71,16 @@ services:
       - "30000-30009:30000-30009"
     environment:
       - PUBLICHOST=localhost
-      - FTP_USER=${FTP_USER}
-      - FTP_PASSWORD=${FTP_PASSWORD}
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_USER=${POSTGRES_USER}
+      - DB_PASSWORD=${POSTGRES_PASSWORD}
+      - DB_NAME=${POSTGRES_DB}
     volumes:
-      - ./hosted-sites:/home/ftpusers/${FTP_USER}
+      - ./hosted-sites:/home/ftpusers
+    depends_on:
+      db:
+        condition: service_healthy
 
 volumes:
   db_data:

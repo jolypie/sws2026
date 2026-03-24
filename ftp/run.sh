@@ -1,22 +1,29 @@
 #!/bin/sh
 set -e
 
-USER=${FTP_USER:-ftpuser}
-PASS=${FTP_PASSWORD:-ftppassword}
-HOME=/home/ftpusers/${USER}
+PASSWD_FILE="/etc/pure-ftpd/pureftpd.passwd"
+PDB_FILE="/etc/pure-ftpd/pureftpd.pdb"
 
-mkdir -p ${HOME}
+mkdir -p /etc/pure-ftpd /home/ftpusers
 
-# Create user if not exists
-if ! id "${USER}" >/dev/null 2>&1; then
-  adduser -D -h ${HOME} ${USER}
+# Create the shared system user that virtual users map to
+if ! id ftpvirtual >/dev/null 2>&1; then
+  adduser -D -h /home/ftpusers -s /sbin/nologin ftpvirtual
 fi
 
-echo "${USER}:${PASS}" | chpasswd
+# Init empty passwd file if missing
+touch "$PASSWD_FILE"
+pure-pw mkdb "$PDB_FILE" -f "$PASSWD_FILE" 2>/dev/null || true
+
+# First sync before starting
+/sync.sh || true
+
+# Background sync loop (every 30 seconds)
+(while true; do sleep 30; /sync.sh || true; done) &
 
 exec pure-ftpd \
-  -l unix \
+  -l puredb:"$PDB_FILE" \
   -p 30000:30009 \
-  -P ${PUBLICHOST:-localhost} \
+  -P "${PUBLICHOST:-localhost}" \
   -j \
   -R

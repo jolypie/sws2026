@@ -35,6 +35,8 @@ export function useDomains(authFetch) {
           domain: data.domain,
           name: data.name,
           description: data.description,
+          ftp_login: data.ftp?.login || null,
+          ftp_password: data.ftp?.password || null,
           created_at: new Date().toISOString()
         }
       ]);
@@ -48,5 +50,22 @@ export function useDomains(authFetch) {
     }
   }
 
-  return { domains, loading, addLoading, addDomain };
+  async function deleteDomain(domainName) {
+    try {
+      const res = await authFetch(`${API}/api/domains/${encodeURIComponent(domainName)}`, {
+        method: "DELETE"
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to delete domain.");
+
+      setDomains((prev) => prev.filter((d) => d.domain !== domainName));
+      return { success: true };
+    } catch (err) {
+      if (err.message === "Unauthorized") return { success: false, unauthorized: true };
+      return { success: false, error: err.message };
+    }
+  }
+
+  return { domains, loading, addLoading, addDomain, deleteDomain };
 }
