@@ -56,7 +56,7 @@ export default function DomainCard({ domain, onDelete }) {
         <div className="domain-card-actions">
           <a
             className="domain-card-link"
-            href={`http://${domain.domain}`}
+            href={`http://${domain.domain}:8080`}
             target="_blank"
             rel="noopener noreferrer"
           >
