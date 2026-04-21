@@ -1,32 +1,39 @@
 #!/bin/sh
-# Syncs ftp_users from PostgreSQL → Pure-FTPd virtual users
+# Syncs ftp_users from all user databases in PostgreSQL → Pure-FTPd virtual users
 
-DB_URL="postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}"
+MAIN_DB_URL="postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}"
 PDB_FILE="/etc/pure-ftpd/pureftpd.pdb"
 PASSWD_FILE="/etc/pure-ftpd/pureftpd.passwd"
 
-ROWS=$(psql "$DB_URL" -t -A -F'|' -c \
-  "SELECT ftp_login, ftp_password, ftp_dir FROM ftp_users" 2>/dev/null)
+# Get all user database names from the main DB
+DB_NAMES=$(psql "$MAIN_DB_URL" -t -A -c \
+  "SELECT db_name FROM users WHERE db_name IS NOT NULL" 2>/dev/null)
 
-if [ -z "$ROWS" ]; then
+if [ -z "$DB_NAMES" ]; then
   exit 0
 fi
 
-changed=0
+for db_name in $DB_NAMES; do
+  USER_DB_URL="postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${db_name}"
 
-echo "$ROWS" | while IFS='|' read -r login password dir; do
-  [ -z "$login" ] && continue
+  ROWS=$(psql "$USER_DB_URL" -t -A -F'|' -c \
+    "SELECT ftp_login, ftp_password, ftp_dir FROM ftp_users" 2>/dev/null)
 
-  mkdir -p "$dir"
+  [ -z "$ROWS" ] && continue
 
-  if pure-pw show "$login" -f "$PASSWD_FILE" >/dev/null 2>&1; then
-    printf "%s\n%s\n" "$password" "$password" | \
-      pure-pw passwd "$login" -f "$PASSWD_FILE" >/dev/null 2>&1
-  else
-    printf "%s\n%s\n" "$password" "$password" | \
-      pure-pw useradd "$login" -u ftpvirtual -d "$dir" -f "$PASSWD_FILE" >/dev/null 2>&1
-    changed=1
-  fi
+  echo "$ROWS" | while IFS='|' read -r login password dir; do
+    [ -z "$login" ] && continue
+
+    mkdir -p "$dir"
+
+    if pure-pw show "$login" -f "$PASSWD_FILE" >/dev/null 2>&1; then
+      printf "%s\n%s\n" "$password" "$password" | \
+        pure-pw passwd "$login" -f "$PASSWD_FILE" >/dev/null 2>&1
+    else
+      printf "%s\n%s\n" "$password" "$password" | \
+        pure-pw useradd "$login" -u ftpvirtual -d "$dir" -f "$PASSWD_FILE" >/dev/null 2>&1
+    fi
+  done
 done
 
 pure-pw mkdb "$PDB_FILE" -f "$PASSWD_FILE" >/dev/null 2>&1
