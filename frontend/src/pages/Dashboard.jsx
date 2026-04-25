@@ -76,6 +76,24 @@ export default function Dashboard() {
             <p>
               Email: <span>{user.email}</span>
             </p>
+            <p>
+              Database:{" "}
+              <span
+                style={{
+                  fontFamily: "monospace",
+                  background: "rgba(163,230,53,0.12)",
+                  color: "#a3e635",
+                  padding: "1px 6px",
+                  borderRadius: "4px",
+                  fontSize: "0.9em",
+                }}
+              >
+                {user.db_name ?? "—"}
+              </span>
+            </p>
+            <p style={{ color: "var(--text-secondary, #888)", fontSize: "0.8em", marginTop: "0.25rem" }}>
+              Your domains and FTP accounts are stored in this isolated database.
+            </p>
           </div>
         </div>
 
