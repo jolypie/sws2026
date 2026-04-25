@@ -121,6 +121,12 @@ router.post('/', requireAuth, async (req, res) => {
             [req.user.id, ftpLogin, ftpPassword, ftpDir]
         );
 
+        const dirExists = await fs.access(clientDir).then(() => true).catch(() => false);
+        if (dirExists) {
+            await client.query('ROLLBACK');
+            return res.status(409).json({ error: 'domain name is already taken' });
+        }
+
         await fs.mkdir(clientDir, { recursive: false });
         createdDir = true;
 
