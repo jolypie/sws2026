@@ -32,14 +32,18 @@ router.post('/register', async (req, res) => {
         );
 
         const userId = inserted.rows[0].id;
-        const dbName = `user_${userId}`;
+        const dbName = `user_${cleanUsername}`;
 
-        await createUserDatabase(dbName);
-
-        await mainPool.query(
-            'UPDATE users SET db_name = $1 WHERE id = $2',
-            [dbName, userId]
-        );
+        try {
+            await createUserDatabase(dbName);
+            await mainPool.query(
+                'UPDATE users SET db_name = $1 WHERE id = $2',
+                [dbName, userId]
+            );
+        } catch (dbErr) {
+            await mainPool.query('DELETE FROM users WHERE id = $1', [userId]).catch(() => {});
+            return res.status(500).json({ error: 'registration failed — could not create user database', details: dbErr.message });
+        }
 
         return res.status(201).json({ message: 'account created' });
     } catch (err) {

@@ -19,6 +19,7 @@ const MAX_POOLS = 100;
 const poolCache = new Map();
 
 function getUserPool(dbName) {
+    if (!dbName) throw new Error('user has no personal database assigned — re-register or contact admin');
     if (poolCache.has(dbName)) {
         const entry = poolCache.get(dbName);
         entry.lastUsed = Date.now();

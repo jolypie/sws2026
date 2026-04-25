@@ -16,11 +16,38 @@ const {
     writeDefaultIndex
 } = require('../services/domainService');
 
+async function createPgRole(db, login, password) {
+    const { rows: dbRows } = await db.query('SELECT current_database() AS db');
+    const dbName = dbRows[0].db;
+
+    const { rows } = await db.query('SELECT 1 FROM pg_roles WHERE rolname = $1', [login]);
+    if (rows.length === 0) {
+        await db.query(`CREATE ROLE "${login}" WITH LOGIN PASSWORD '${password}'`);
+    } else {
+        await db.query(`ALTER ROLE "${login}" WITH PASSWORD '${password}'`);
+    }
+    await db.query(`GRANT CONNECT ON DATABASE "${dbName}" TO "${login}"`);
+    await db.query(`GRANT USAGE ON SCHEMA public TO "${login}"`);
+    await db.query(`GRANT SELECT ON domains, ftp_users TO "${login}"`);
+}
+
+async function dropPgRole(db, login) {
+    const { rows } = await db.query('SELECT 1 FROM pg_roles WHERE rolname = $1', [login]);
+    if (!rows.length) return;
+
+    const { rows: dbRows } = await db.query('SELECT current_database() AS db');
+    const dbName = dbRows[0].db;
+
+    try { await db.query(`REVOKE ALL ON ALL TABLES IN SCHEMA public FROM "${login}"`); } catch {}
+    try { await db.query(`REVOKE CONNECT ON DATABASE "${dbName}" FROM "${login}"`); } catch {}
+    await db.query(`DROP ROLE IF EXISTS "${login}"`);
+}
+
 const router = express.Router();
 
 router.get('/', requireAuth, async (req, res) => {
-    const pool = getUserPool(req.user.db_name);
     try {
+        const pool = getUserPool(req.user.db_name);
         const result = await pool.query(
             `SELECT d.id, d.domain, d.name, d.description, d.created_at,
                     f.ftp_login, f.ftp_password
@@ -59,7 +86,12 @@ router.post('/', requireAuth, async (req, res) => {
     let wroteIndex = false;
     let appendedVhost = false;
 
-    const pool = getUserPool(req.user.db_name);
+    let pool;
+    try {
+        pool = getUserPool(req.user.db_name);
+    } catch (err) {
+        return res.status(400).json({ error: err.message });
+    }
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
@@ -101,6 +133,9 @@ router.post('/', requireAuth, async (req, res) => {
         appendedVhost = await appendVhostIfMissing(normalizedDomain);
 
         await client.query('COMMIT');
+
+        // Create PostgreSQL role for this FTP user (outside transaction — DDL can't be rolled back)
+        await createPgRole(pool, ftpLogin, ftpPassword);
 
         return res.status(201).json({
             message: 'domain added',
@@ -146,7 +181,12 @@ router.delete('/:domain', requireAuth, async (req, res) => {
         return res.status(400).json({ error: 'invalid domain path' });
     }
 
-    const pool = getUserPool(req.user.db_name);
+    let pool;
+    try {
+        pool = getUserPool(req.user.db_name);
+    } catch (err) {
+        return res.status(400).json({ error: err.message });
+    }
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
@@ -161,9 +201,11 @@ router.delete('/:domain', requireAuth, async (req, res) => {
             return res.status(404).json({ error: 'domain not found or access denied' });
         }
 
+        const ftpLogin = ftpLoginFromDomain(normalizedDomain);
+
         await client.query(
             'DELETE FROM ftp_users WHERE ftp_login = $1 AND user_id = $2',
-            [ftpLoginFromDomain(normalizedDomain), req.user.id]
+            [ftpLogin, req.user.id]
         );
 
         await client.query(
@@ -178,6 +220,9 @@ router.delete('/:domain', requireAuth, async (req, res) => {
         } catch {}
 
         await client.query('COMMIT');
+
+        // Drop PostgreSQL role (outside transaction — DDL can't be rolled back)
+        await dropPgRole(pool, ftpLogin);
 
         return res.status(200).json({ message: 'domain deleted', domain: normalizedDomain });
     } catch (err) {

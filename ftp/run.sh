@@ -18,8 +18,8 @@ pure-pw mkdb "$PDB_FILE" -f "$PASSWD_FILE" 2>/dev/null || true
 # First sync before starting
 /sync.sh || true
 
-# Background sync loop (every 30 seconds)
-(while true; do sleep 30; /sync.sh || true; done) &
+# Background sync loop (every 5 seconds)
+(while true; do sleep 5; /sync.sh || true; done) &
 
 exec pure-ftpd \
   -l puredb:"$PDB_FILE" \
