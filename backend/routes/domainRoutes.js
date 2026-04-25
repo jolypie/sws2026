@@ -134,8 +134,12 @@ router.post('/', requireAuth, async (req, res) => {
 
         await client.query('COMMIT');
 
-        // Create PostgreSQL role for this FTP user (outside transaction — DDL can't be rolled back)
-        await createPgRole(pool, ftpLogin, ftpPassword);
+        // PG role is best-effort — domain is already created, don't fail over it
+        try {
+            await createPgRole(pool, ftpLogin, ftpPassword);
+        } catch (roleErr) {
+            console.warn('[domain] PG role creation failed (non-fatal):', roleErr.message);
+        }
 
         return res.status(201).json({
             message: 'domain added',
@@ -221,8 +225,11 @@ router.delete('/:domain', requireAuth, async (req, res) => {
 
         await client.query('COMMIT');
 
-        // Drop PostgreSQL role (outside transaction — DDL can't be rolled back)
-        await dropPgRole(pool, ftpLogin);
+        try {
+            await dropPgRole(pool, ftpLogin);
+        } catch (roleErr) {
+            console.warn('[domain] PG role drop failed (non-fatal):', roleErr.message);
+        }
 
         return res.status(200).json({ message: 'domain deleted', domain: normalizedDomain });
     } catch (err) {

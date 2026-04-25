@@ -24,7 +24,7 @@ echo "=============================="
 
 # --- /etc/hosts ---
 echo ""
-echo "[1/2] Adding test domains to /etc/hosts (needs sudo)..."
+echo "[1/3] Adding test domains to /etc/hosts (needs sudo)..."
 ADDED=0
 for domain in $DOMAINS; do
   domain=$(echo "$domain" | tr -d ' ')
