@@ -13,3 +13,9 @@ dist-ssr/
 # IDE
 .vscode/
 .idea/
+
+# Claude Code internals
+.claude/worktrees/
+
+# Runtime-generated user site files
+hosted-sites/*/
