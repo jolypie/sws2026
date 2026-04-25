@@ -1,7 +1,7 @@
 const express = require('express');
 const fs = require('fs/promises');
 const path = require('path');
-const pool = require('../db/pool');
+const { getUserPool } = require('../db/pool');
 const requireAuth = require('../middleware/authMiddleware');
 const { SITES_ROOT } = require('../config/env');
 const {
@@ -19,6 +19,7 @@ const {
 const router = express.Router();
 
 router.get('/', requireAuth, async (req, res) => {
+    const pool = getUserPool(req.user.db_name);
     try {
         const result = await pool.query(
             `SELECT d.id, d.domain, d.name, d.description, d.created_at,
@@ -58,6 +59,7 @@ router.post('/', requireAuth, async (req, res) => {
     let wroteIndex = false;
     let appendedVhost = false;
 
+    const pool = getUserPool(req.user.db_name);
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
@@ -92,6 +94,9 @@ router.post('/', requireAuth, async (req, res) => {
 
         await writeDefaultIndex(clientDir, normalizedDomain);
         wroteIndex = true;
+
+        await fs.chmod(clientDir, 0o777);
+        await fs.chmod(path.join(clientDir, 'index.html'), 0o666);
 
         appendedVhost = await appendVhostIfMissing(normalizedDomain);
 
@@ -141,6 +146,7 @@ router.delete('/:domain', requireAuth, async (req, res) => {
         return res.status(400).json({ error: 'invalid domain path' });
     }
 
+    const pool = getUserPool(req.user.db_name);
     const client = await pool.connect();
     try {
         await client.query('BEGIN');

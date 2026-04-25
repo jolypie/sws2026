@@ -1,22 +1,22 @@
-const fs = require('fs/promises');
-const pool = require('./pool');
+const { mainPool } = require('./pool');
 
 async function runMigrations() {
-    const check = await pool.query(`
-        SELECT EXISTS (
-            SELECT FROM information_schema.tables
-            WHERE table_schema = 'public' AND table_name = 'domains'
+    await mainPool.query(`
+        CREATE TABLE IF NOT EXISTS users (
+            id            SERIAL PRIMARY KEY,
+            username      VARCHAR(50)  UNIQUE NOT NULL,
+            email         VARCHAR(190) UNIQUE NOT NULL,
+            password_hash VARCHAR(255) NOT NULL,
+            db_name       VARCHAR(64)  UNIQUE,
+            created_at    TIMESTAMP DEFAULT NOW()
         )
     `);
 
-    if (!check.rows[0].exists) {
-        console.log('[migration] domains table not found, running 001_jwt_multi_domain...');
-        const sql = await fs.readFile('/app/db/migrations/001_jwt_multi_domain.sql', 'utf8');
-        await pool.query(sql);
-        console.log('[migration] done.');
-    } else {
-        console.log('[migration] schema up to date.');
-    }
+    await mainPool.query(`
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS db_name VARCHAR(64) UNIQUE
+    `);
+
+    console.log('[migration] main schema up to date.');
 }
 
 module.exports = { runMigrations };
